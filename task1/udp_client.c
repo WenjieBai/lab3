@@ -23,7 +23,6 @@ int createTunDevice() {
    ioctl(tunfd, TUNSETIFF, &ifr);   
 
    printf("tun file descriptor: %d\n", tunfd);  
-   execve("/bin/bash", NULL, NULL);  
 
    return tunfd;
 }
