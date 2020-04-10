@@ -1,5 +1,5 @@
 all: 
-	gcc -o tlsclient tlsclient.c -I/usr/local/ssl/include -lssl -lcrypto 
+	gcc -o tlsclient tlsclient.c -lssl -lcrypto 
 	gcc -o tlsserver tlsserver.c -lssl -lcrypto 
 	gcc -o vpnserver_tls vpnserver_tls.c -lssl -lcrypto -lcrypt
 	gcc -o vpnserver_tls_multiclient vpnserver_tls_multiclient.c -lssl -lcrypto -lcrypt
