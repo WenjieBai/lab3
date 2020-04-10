@@ -38,7 +38,6 @@ int initUDPServer() {
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     bind(sockfd, (struct sockaddr*) &server, sizeof(server)); 
 
-    // Wait for the VPN client to "connect".
     bzero(buff, 100);
     int peerAddrLen = sizeof(struct sockaddr_in);
     int len = recvfrom(sockfd, buff, 100, 0,                  
