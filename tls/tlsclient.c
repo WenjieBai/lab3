@@ -46,8 +46,8 @@ SSL* setupTLSClient(const char* hostname)
    }
    ssl = SSL_new (ctx);
 
-   X509_VERIFY_PARAM *vpm = SSL_get0_param(ssl); 
-   X509_VERIFY_PARAM_set1_host(vpm, hostname, 0);
+  // X509_VERIFY_PARAM *vpm = SSL_get0_param(ssl); 
+   //sX509_VERIFY_PARAM_set1_host(vpm, hostname, 0);
 
    return ssl;
 }

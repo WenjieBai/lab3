@@ -12,7 +12,7 @@
 #define SERVER_IP "10.0.1.1"
 struct sockaddr_in peerAddr;
 
-int registerTunInterface() {
+int createTunDevice() {
    int tunfd;
    struct ifreq ifr;
    memset(&ifr, 0, sizeof(ifr));
