@@ -19,7 +19,7 @@
 
 #define BUFF_SIZE 2000
 #define PORT_NUMBER 55555
-#define SERVER_IP "10.0.2.7"
+#define SERVER_IP "192.168.15.4"
 
 
 #define CHK_SSL(err) if ((err) < 1) { ERR_print_errors_fp(stderr); exit(2); }
@@ -159,8 +159,8 @@ SSL* setupTLSClient(const char* hostname)
    }
    ssl = SSL_new (ctx);
 
-   X509_VERIFY_PARAM *vpm = SSL_get0_param(ssl); 
-   X509_VERIFY_PARAM_set1_host(vpm, hostname, 0);
+   // X509_VERIFY_PARAM *vpm = SSL_get0_param(ssl); 
+   // X509_VERIFY_PARAM_set1_host(vpm, hostname, 0);
 
    return ssl;
 }
