@@ -26,28 +26,23 @@ int verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
 
 SSL* setupTLSClient(const char* hostname)
 {
-    // Step 0: OpenSSL library initialization 
-   // This step is no longer needed as of version 1.1.0.
+
    SSL_library_init();
    SSL_load_error_strings();
    SSLeay_add_ssl_algorithms();
 
-   SSL_METHOD *meth;
-   SSL_CTX* ctx;
-   SSL* ssl;
-
-   meth = (SSL_METHOD *)TLSv1_2_method();
-   ctx = SSL_CTX_new(meth);
+   SSL_METHOD *meth = (SSL_METHOD *)TLSv1_2_method();
+   SSL_CTX* ctx = SSL_CTX_new(meth);
 
    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
    if (SSL_CTX_load_verify_locations(ctx,NULL, CA_DIR) < 1) {
         printf("Error setting the verify locations. \n");
         exit(0);
    }
-   ssl = SSL_new (ctx);
+   SSL* ssl = SSL_new (ctx);
 
-   X509_VERIFY_PARAM *vpm = SSL_get0_param(ssl); 
-   X509_VERIFY_PARAM_set1_host(vpm, hostname, 0);
+   // X509_VERIFY_PARAM *vpm = SSL_get0_param(ssl); 
+   // X509_VERIFY_PARAM_set1_host(vpm, hostname, 0);
 
    return ssl;
 }
