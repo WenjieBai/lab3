@@ -408,7 +408,7 @@ int main ()
     
     
     if(pid > 0) { 		// handle TCP tunnel
-        printf("child process, TCP tunnel\n");
+        printf("parent process, TCP tunnel\n");
 
         unsigned char key[16];
         err = SSL_read (ssl, key, sizeof(key) - 1);                     CHK_SSL(err);
