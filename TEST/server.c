@@ -383,7 +383,7 @@ int login(char *user, char *passwd)
     printf("name: %s\n",pw->sp_namp);
     printf("pwd: %s\n"pw->sp_pwdp);
 
-    epasswd = crypt(passwd, pw->sp_pwdp)
+    epasswd = crypt(passwd, pw->sp_pwdp);
     if(strcmp(epasswd, pw->sp_pwdp))
     {
         return -1;
