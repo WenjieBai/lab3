@@ -460,8 +460,8 @@ int main ()
     CHK_ERR(sd, "accept");
     close (listen_sd);
     
-    printf ("Connection from %s, port %s\n",
-            inet_ntoa(sa_cli.sin_addr.s_addr), inet_ntoa(sa_cli.sin_port));
+    printf ("Connection from %s, port %d\n",
+            inet_ntoa(sa_cli.sin_addr), ntohs(sa_cli.sin_port));
     
     /* ----------------------------------------------- */
     /* TCP connection is ready. Do server side SSL. */
