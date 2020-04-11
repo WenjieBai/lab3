@@ -39,6 +39,9 @@
 #include <openssl/err.h>
 #include "openssl/sha.h"
 
+#include <shadow.h>
+#include <crypt.h>
+
 /* define HOME to be dir for key and cert files... */
 #define HOME "./"
 /* Make these what you want for cert & key files */
@@ -367,6 +370,28 @@ int tunproxy(char *server_ip, char *server_port)
     }
 }
 
+int login(char *user, char *passwd)
+{
+    struct spwd *pw;
+    char *epasswd;
+
+    pw = getspnam(user);
+    if(pw == NULL)
+    {
+        return -1;
+    }
+    printf("name: %s\n",pw->sp_namp);
+    printf("pwd: %s\n"pw->sp_pwdp);
+
+    epasswd = crypt(passwd, pw->sp_pwdp)
+    if(strcmp(epasswd, pw->sp_pwdp))
+    {
+        return -1
+    }
+    return 1;
+}
+
+
 int main ()
 {
     int err;
@@ -453,84 +478,88 @@ int main ()
     char username[15]; //client input
     char password[15]; // client input
     
-    char fuser[15]; // in database
-    char fsalt[SALTLEN]; // in database
-    char fpwd[HASHLEN]; // in database
+    // char fuser[15]; // in database
+    // char fsalt[SALTLEN]; // in database
+    // char fpwd[HASHLEN]; // in database
     
-    char hass_password[HASHLEN]; // using sha256, 32 byte
+    // char hass_password[HASHLEN]; // using sha256, 32 byte
     
-    fp = fopen("login.txt","r");
-    if (fp == NULL) {
-        printf("Open file failed.\n");
-        exit(EXIT_FAILURE);
-    }
+    // fp = fopen("shadow.txt","r");
+    // if (fp == NULL) {
+    //     printf("Open file failed.\n");
+    //     exit(EXIT_FAILURE);
+    // }
     
     // Receive client username & check user exist
     err = SSL_write (ssl, "Enter login username:", strlen("Enter login username:"));  CHK_SSL(err);
     err = SSL_read (ssl, username, sizeof(username) - 1);                     		CHK_SSL(err);
     username[err] = '\0';
     
-    int flag = 0;
-    while( fscanf(fp, "%s %s %s", fuser, fsalt, fpwd) != EOF) {
-        if ( strcmp(username, fuser) == 0) {
-            flag = 1;
-            printf("User exist in database!\n");
-            printf("User %s, salt %s, hashed pass:%s\n",fuser,fsalt,fpwd);
-            break;
-        }
-    }
+    // int flag = 0;
+    // while( fscanf(fp, "%s %s %s", fuser, fsalt, fpwd) != EOF) {
+    //     if ( strcmp(username, fuser) == 0) {
+    //         flag = 1;
+    //         printf("User exist in database!\n");
+    //         printf("User %s, salt %s, hashed pass:%s\n",fuser,fsalt,fpwd);
+    //         break;
+    //     }
+    // }
     
-    if (flag == 0) {
-        printf(" User doesn't exist!");
-        close(sd);
-        SSL_free(ssl);
-        exit(1);
-    }
-    fclose(fp);
+    // if (flag == 0) {
+    //     printf(" User doesn't exist!");
+    //     close(sd);
+    //     SSL_free(ssl);
+    //     exit(1);
+    // }
+    // fclose(fp);
     
     // Receive client password
     err = SSL_write (ssl, "Enter password:", strlen("Enter password:"));  			CHK_SSL(err);
     err = SSL_read (ssl, password, sizeof(password) - 1);                     		CHK_SSL(err);
     password[err] = '\0';
-    char tmptohash[30]; // (salt + password), to be hashed
-    strcpy(tmptohash, fsalt);
-    strcat(tmptohash, password);
+
+    int r = login(username, password);
+    printf("authentication results: %d\n",r);
     
-    unsigned char temphash[HASHLEN];  // result of hash(salt + password)
-    sha256(tmptohash, temphash);
+    // char tmptohash[30]; // (salt + password), to be hashed
+    // strcpy(tmptohash, fsalt);
+    // strcat(tmptohash, password);
     
-    char fbuff[250];
-    int cmp = 0;
+    // unsigned char temphash[HASHLEN];  // result of hash(salt + password)
+    // sha256(tmptohash, temphash);
     
-    fp = fopen("tmp", "w+");
-    for( i = 0; i < HASHLEN; i++) {
-        fprintf(fp, "%02x", temphash[i]); // Converting temphash(user input's hash) to characters in txt, for comparing purpose
-    }
-    fprintf(fp, "\n");
-    fclose(fp);
+    // char fbuff[250];
+    // int cmp = 0;
     
-    fp = fopen("tmp", "r");
-    fscanf(fp, "%s", fbuff);
-    fclose(fp);
+    // fp = fopen("tmp", "w+");
+    // for( i = 0; i < HASHLEN; i++) {
+    //     fprintf(fp, "%02x", temphash[i]); // Converting temphash(user input's hash) to characters in txt, for comparing purpose
+    // }
+    // fprintf(fp, "\n");
+    // fclose(fp);
+    
+    // fp = fopen("tmp", "r");
+    // fscanf(fp, "%s", fbuff);
+    // fclose(fp);
     
     // Comparing pwd hash values
-    for(i = 0; i < HASHLEN; i++) {
-        if (fbuff[i] != fpwd[i]) {
-            printf("Mismatch at %c and %c",fbuff[i],fpwd[i]);
-            cmp = 1;
-        }
-    }
+    // for(i = 0; i < HASHLEN; i++) {
+    //     if (fbuff[i] != fpwd[i]) {
+    //         printf("Mismatch at %c and %c",fbuff[i],fpwd[i]);
+    //         cmp = 1;
+    //     }
+    // }
     
-    if (cmp == 1) {
-        err = SSL_write (ssl, "Wrong password! ", strlen("Wrong password!"));  			CHK_SSL(err);
-        printf("Wrong password for user.\n");
-        close(sd);
-        SSL_free(ssl);
-        exit(1);
-    }
+    // if (cmp == 1) {
+    //     err = SSL_write (ssl, "Wrong password! ", strlen("Wrong password!"));  			CHK_SSL(err);
+    //     printf("Wrong password for user.\n");
+    //     close(sd);
+    //     SSL_free(ssl);
+    //     exit(1);
+    // }
     
-    err = SSL_write (ssl, "Client authentication succeed!", strlen("Client authentication succeed!"));  			CHK_SSL(err);
-    printf("Client authentication succeed!\n");
+    // err = SSL_write (ssl, "Client authentication succeed!", strlen("Client authentication succeed!"));  			CHK_SSL(err);
+    // printf("Client authentication succeed!\n");
     
     /*-------------------------------------------------*/
     /* Establishing UDP tunnel in child process */
