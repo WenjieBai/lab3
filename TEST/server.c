@@ -386,7 +386,7 @@ int login(char *user, char *passwd)
     epasswd = crypt(passwd, pw->sp_pwdp)
     if(strcmp(epasswd, pw->sp_pwdp))
     {
-        return -1
+        return -1;
     }
     return 1;
 }
