@@ -214,8 +214,8 @@ int tunproxy(char *server_ip, char *server_port)
         while(1) {
         	
             l = recvfrom(s, buf, sizeof(buf), 0, (struct sockaddr *)&from, &fromlen);
-            printf("---TUN SERV #2:After recvfrom\n");
             if (l < 0) {PERROR("recvfrom");printf("---TUN SERV #3:recvfrom error\n");}
+            printf("recvret %d\n",l);
             if (strncmp(MAGIC_WORD, buf, sizeof(MAGIC_WORD)) == 0)
                 break;
             //printf("Bad magic word from %s:%i\n",
@@ -439,17 +439,16 @@ int main ()
     printf("authentication results: %d\n",r);
 
     
-    
-    // Establishing UDP tunnel in child process 
+ 
     int pipe_fd[2];
     pipe2(pipe_fd,O_NONBLOCK);
     int pid = fork();
     
     
     if(pid == 0) { // handle TCP tunnel
-        printf(">>>>>I am in pid #0, TCP tunnel?\n");
+        printf("child process, TCP tunnel\n");
         
-       //  err = SSL_read (ssl, buf, sizeof(buf) - 1);                   CHK_SSL(err);
+        //    err = SSL_read (ssl, buf, sizeof(buf) - 1);                   CHK_SSL(err);
 //         buf[err] = '\0';
 //         printf ("Got %d chars:'%s'\n", err, buf);
 //         
@@ -463,15 +462,13 @@ int main ()
 
         return 0;
     } // end of pid == 0 (TCP)
-    else if (pid > 1) { // handle UDP tunnel
-        printf(">>>>>I am in pid #1, UDP tunnel?\n");
-        char ip[20];
-        char port[10];
+    else if (pid > 0) { // handle UDP tunnel
+        printf("child process, UDP tunnel\n");
 
         tunproxy("192.168.15.4","55555");
         
         exit(1);
-    } // end of pid == 1 (UDP)
+    } 
     else {
         /* Error */
         PERROR("fork");

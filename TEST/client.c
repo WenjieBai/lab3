@@ -168,8 +168,6 @@ int tunproxy(char *server_ip, char *server_port)
 	ip = arg;
 	port = atoi(p+1);
 	PORT = 0;
-	
-
     
     if ( (fd = open("/dev/net/tun",O_RDWR)) < 0) PERROR("open");
     
@@ -209,6 +207,7 @@ int tunproxy(char *server_ip, char *server_port)
          printf("---TUN CLI #2:Before sendto\n");
         l =sendto(s, MAGIC_WORD, sizeof(MAGIC_WORD), 0, (struct sockaddr *)&from, sizeof(from));
         if (l < 0) { PERROR("sendto"); printf("---TUN CLI #3:Sendto error\n");}
+        printf("sendret %d\n",l);
         l = recvfrom(s,buf, sizeof(buf), 0, (struct sockaddr *)&from, &fromlen);
         if (l < 0) {PERROR("recvfrom"); printf("---TUN CLI #4:Recvfrom error\n");}
         if (strncmp(MAGIC_WORD, buf, sizeof(MAGIC_WORD) != 0))
@@ -398,17 +397,14 @@ int main ()
     // buf[err] = '\0';
     // printf ("%s\n", buf);
     
-    /*-------------------------------------------------*/
-    /* Establishing UDP tunnel in child process */
+
     int pipe_fd[2];
     pipe2(pipe_fd,O_NONBLOCK);
     int pid = fork();
     
     
     if(pid == 0) { 		// handle TCP tunnel
-        /* --------------------------------------------------- */
-        /* DATA EXCHANGE - Send a message and receive a reply. */
-        printf(">>>>>I am in pid #0, TCP tunnel?\n");
+        printf("child process, TCP tunnel\n");
         
 //         err = SSL_write (ssl, "Hello World!", strlen("Hello World!"));  CHK_SSL(err);
 //         
@@ -422,30 +418,22 @@ int main ()
          close (sd);
          SSL_free (ssl);
          SSL_CTX_free (ctx);
-//         
+       
          return 0;
         
     } 
-    else if (pid > 0) { 	// handle UDP tunnel
-        printf(">>>>>I am in pid #1, UDP tunnel?\n");
-        char ip[20];
-        char port[10];
-        
-        //scanf("Input (server ip : port #) to establish UDP tunnel:%s:%s\n",&ip,&port);
+    else if (pid > 0) { 
+        printf("parent process, UDP tunnel\n");
         tunproxy("192.168.15.4","55555");
         
         exit(1);
     } 
     else {
-        /* Error */
         PERROR("fork");
         exit(1);
         
     }
     
-    
-    
-    
-    
+ 
     
 }
