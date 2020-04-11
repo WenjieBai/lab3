@@ -1,16 +1,3 @@
-/* serv.cpp  -  Minimal ssleay server for Unix
- 30.9.1996, Sampo Kellomaki <sampo@iki.fi> */
-
-
-/* mangled to work with SSLeay-0.9.0b and OpenSSL 0.9.2b
- Simplified to be even more minimal
- 12/98 - 4/99 Wade Scholine <wades@mail.cybg.com> */
-
-/* CIS 644 Internet Security final project - MiniVPN
- * integrated with tunproxy to setup data transmission UDP tunnel with encryption/HMAC
- * Using IPC to manipulate SSL TCP tunnel & UDP tunnel
- * 2016/4/29, Lingwei Wu <lwu108@syr.edu>, Syracuse University
- */
 
 #include <stdio.h>
 #include <unistd.h>
@@ -42,9 +29,8 @@
 #include <shadow.h>
 #include <crypt.h>
 
-/* define HOME to be dir for key and cert files... */
-#define HOME "./"
-/* Make these what you want for cert & key files */
+
+#define HOME "./"s
 #define CERTF  HOME "server.crt"
 #define KEYF  HOME  "server.key"
 #define CACERT HOME "ca.crt"
@@ -83,11 +69,6 @@ unsigned char * rand_N (const int N) {
 
 /*
  * Encrypt/decrypt
- *
- * Succeed:
- * return output length
- * Failed:
- * return 0
  */
 int do_crypt(char *input, int inlen, char *output, const unsigned char *key, const unsigned char *iv, int do_encrypt)
 {
@@ -131,7 +112,6 @@ int do_crypt(char *input, int inlen, char *output, const unsigned char *key, con
 
 /*
  * the HMAC_SHA256 transform looks like:
- *
  * SHA256(K XOR opad, SHA256(K XOR ipad, text))
  *
  * where K is an n byte key
@@ -211,45 +191,14 @@ int tunproxy(char *server_ip, char *server_port)
     MODE = 1;
     PORT = atoi(server_port);
 
-    
-//     while ((c = getopt(argc, argv, "s:c:ehd")) != -1) {
-//         switch (c) {
-//             case 'h':
-//                 //usage();
-//             case 'd':
-//                 DEBUG++;
-//                 break;
-//             case 's':
-//                 MODE = 1;
-//                 PORT = atoi(optarg);
-//                 break;
-//             case 'c':
-//                 MODE = 2;
-//                 p = memchr(optarg,':',16);
-//                 if (!p) ERROR("invalid argument : [%s]\n",optarg);
-//                 *p = 0;
-//                 ip = optarg;
-//                 port = atoi(p+1);
-//                 PORT = 0;
-//                 break;
-//             case 'e':
-//                 TUNMODE = IFF_TAP;
-//                 break;
-//             default:
-//                 //usage();
-//         }
-//     }
-//     if (MODE == 0) usage();
-
-    
     if ( (fd = open("/dev/net/tun",O_RDWR)) < 0) PERROR("open");
     
     memset(&ifr, 0, sizeof(ifr));
     ifr.ifr_flags = TUNMODE;
-    strncpy(ifr.ifr_name, "toto%d", IFNAMSIZ);
+    strncpy(ifr.ifr_name, "tun%d", IFNAMSIZ);
     if (ioctl(fd, TUNSETIFF, (void *)&ifr) < 0) PERROR("ioctl");
     
-    printf("Allocated interface %s. Configure and use it\n", ifr.ifr_name);
+    printf("Allocated interface %s.\n", ifr.ifr_name);
     
     s = socket(PF_INET, SOCK_DGRAM, 0);
     sin.sin_family = AF_INET;
@@ -408,7 +357,6 @@ int main ()
     SSL_METHOD *meth;
     int i;
     
-    /* SSL preliminaries. We keep the certificate and key with the context. */
     
     SSL_load_error_strings(); // readable error messages
     SSLeay_add_ssl_algorithms();
@@ -438,9 +386,8 @@ int main ()
         exit(5);
     }
     
-    /* ----------------------------------------------- */
-    /* Prepare TCP socket for receiving connections */
-    
+   
+    // setup TCP connection
     listen_sd = socket (AF_INET, SOCK_STREAM, 0);   CHK_ERR(listen_sd, "socket");
     
     memset (&sa_serv, '\0', sizeof(sa_serv));
@@ -448,11 +395,12 @@ int main ()
     sa_serv.sin_addr.s_addr = INADDR_ANY;
     sa_serv.sin_port        = htons (1111);          /* Server Port number */
     
+    // bind
     err = bind(listen_sd, (struct sockaddr*) &sa_serv,
                sizeof (sa_serv));                   CHK_ERR(err, "bind");
     
-    /* Receive a TCP connection. */
     
+    // listen
     err = listen (listen_sd, 5);                    CHK_ERR(err, "listen");
     
     client_len = sizeof(sa_cli);
@@ -460,12 +408,10 @@ int main ()
     CHK_ERR(sd, "accept");
     close (listen_sd);
     
-    printf ("Connection from %s, port %d\n",
-            inet_ntoa(sa_cli.sin_addr), ntohs(sa_cli.sin_port));
+    printf ("Connection request from %s, port %d\n",inet_ntoa(sa_cli.sin_addr), ntohs(sa_cli.sin_port));
     
-    /* ----------------------------------------------- */
-    /* TCP connection is ready. Do server side SSL. */
-    
+  
+    // TSL Handshake
     ssl = SSL_new (ctx);                           CHK_NULL(ssl);
     SSL_set_fd (ssl, sd);
     err = SSL_accept (ssl);                        CHK_SSL(err);
@@ -473,45 +419,16 @@ int main ()
     /* Get the cipher - opt */
     printf ("SSL connection using %s\n", SSL_get_cipher (ssl));
     
-    /* Get client's certificate ( username & password login) */
+    // authenticate user
     FILE *fp;
     char username[15]; //client input
     char password[15]; // client input
     
-    // char fuser[15]; // in database
-    // char fsalt[SALTLEN]; // in database
-    // char fpwd[HASHLEN]; // in database
     
-    // char hass_password[HASHLEN]; // using sha256, 32 byte
-    
-    // fp = fopen("shadow.txt","r");
-    // if (fp == NULL) {
-    //     printf("Open file failed.\n");
-    //     exit(EXIT_FAILURE);
-    // }
-    
-    // Receive client username & check user exist
+    // Receive client username
     err = SSL_write (ssl, "Enter login username:", strlen("Enter login username:"));  CHK_SSL(err);
     err = SSL_read (ssl, username, sizeof(username) - 1);                     		CHK_SSL(err);
     username[err] = '\0';
-    
-    // int flag = 0;
-    // while( fscanf(fp, "%s %s %s", fuser, fsalt, fpwd) != EOF) {
-    //     if ( strcmp(username, fuser) == 0) {
-    //         flag = 1;
-    //         printf("User exist in database!\n");
-    //         printf("User %s, salt %s, hashed pass:%s\n",fuser,fsalt,fpwd);
-    //         break;
-    //     }
-    // }
-    
-    // if (flag == 0) {
-    //     printf(" User doesn't exist!");
-    //     close(sd);
-    //     SSL_free(ssl);
-    //     exit(1);
-    // }
-    // fclose(fp);
     
     // Receive client password
     err = SSL_write (ssl, "Enter password:", strlen("Enter password:"));  			CHK_SSL(err);
@@ -520,49 +437,10 @@ int main ()
 
     int r = login(username, password);
     printf("authentication results: %d\n",r);
+
     
-    // char tmptohash[30]; // (salt + password), to be hashed
-    // strcpy(tmptohash, fsalt);
-    // strcat(tmptohash, password);
     
-    // unsigned char temphash[HASHLEN];  // result of hash(salt + password)
-    // sha256(tmptohash, temphash);
-    
-    // char fbuff[250];
-    // int cmp = 0;
-    
-    // fp = fopen("tmp", "w+");
-    // for( i = 0; i < HASHLEN; i++) {
-    //     fprintf(fp, "%02x", temphash[i]); // Converting temphash(user input's hash) to characters in txt, for comparing purpose
-    // }
-    // fprintf(fp, "\n");
-    // fclose(fp);
-    
-    // fp = fopen("tmp", "r");
-    // fscanf(fp, "%s", fbuff);
-    // fclose(fp);
-    
-    // Comparing pwd hash values
-    // for(i = 0; i < HASHLEN; i++) {
-    //     if (fbuff[i] != fpwd[i]) {
-    //         printf("Mismatch at %c and %c",fbuff[i],fpwd[i]);
-    //         cmp = 1;
-    //     }
-    // }
-    
-    // if (cmp == 1) {
-    //     err = SSL_write (ssl, "Wrong password! ", strlen("Wrong password!"));  			CHK_SSL(err);
-    //     printf("Wrong password for user.\n");
-    //     close(sd);
-    //     SSL_free(ssl);
-    //     exit(1);
-    // }
-    
-    // err = SSL_write (ssl, "Client authentication succeed!", strlen("Client authentication succeed!"));  			CHK_SSL(err);
-    // printf("Client authentication succeed!\n");
-    
-    /*-------------------------------------------------*/
-    /* Establishing UDP tunnel in child process */
+    // Establishing UDP tunnel in child process 
     int pipe_fd[2];
     pipe2(pipe_fd,O_NONBLOCK);
     int pid = fork();
@@ -590,7 +468,7 @@ int main ()
         char ip[20];
         char port[10];
 
-        tunproxy("172.16.20.177","45569");
+        tunproxy("192.168.15.4","55555");
         
         exit(1);
     } // end of pid == 1 (UDP)
@@ -603,4 +481,4 @@ int main ()
   
     
 }
-/* EOF - serv.cpp */
+

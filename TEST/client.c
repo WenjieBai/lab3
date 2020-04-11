@@ -1,15 +1,3 @@
-/* cli.cpp  -  Minimal ssleay client for Unix
- 30.9.1996, Sampo Kellomaki <sampo@iki.fi> */
-
-/* mangled to work with SSLeay-0.9.0b and OpenSSL 0.9.2b
- Simplified to be even more minimal
- 12/98 - 4/99 Wade Scholine <wades@mail.cybg.com> */
-
-/* CIS 644 Internet Security final project - MiniVPN
- * integrated with tunproxy to setup data transmission UDP tunnel with encryption/HMAC
- * Using IPC to manipulate SSL TCP tunnel & UDP tunnel
- * 2016/4/29, Lingwei Wu <lwu108@syr.edu>, Syracuse University
- */
 
 #include <unistd.h>
 #include <stdio.h>
@@ -68,14 +56,8 @@ unsigned char * rand_N (const int N) {
     return seed;
 }
 
-/*
- * Encrypt/decrypt
- *
- * Succeed:
- * return output length
- * Failed:
- * return 0
- */
+// encrypt/decrypt
+
 int do_crypt(char *input, int inlen, char *output, const unsigned char *key, const unsigned char *iv, int do_encrypt)
 {
     unsigned char outbuf[1024 + EVP_MAX_BLOCK_LENGTH];
@@ -187,45 +169,16 @@ int tunproxy(char *server_ip, char *server_port)
 	port = atoi(p+1);
 	PORT = 0;
 	
-    
-//     while ((c = getopt(argc, argv, "s:c:ehd")) != -1) {
-//         switch (c) {
-//             case 'h':
-//                 //usage();
-//             case 'd':
-//                 DEBUG++;
-//                 break;
-//             case 's':
-//                 MODE = 1;
-//                 PORT = atoi(optarg);
-//                 break;
-//             case 'c':
-//                 MODE = 2;
-//                 p = memchr(optarg,':',16);
-//                 if (!p) ERROR("invalid argument : [%s]\n",optarg);
-//                 *p = 0;
-//                 ip = optarg;
-//                 port = atoi(p+1);
-//                 PORT = 0;
-//                 break;
-//             case 'e':
-//                 TUNMODE = IFF_TAP;
-//                 break;
-//             default:
-//                 //usage();
-//         }
-//     }
-//     if (MODE == 0) usage();
 
     
     if ( (fd = open("/dev/net/tun",O_RDWR)) < 0) PERROR("open");
     
     memset(&ifr, 0, sizeof(ifr));
     ifr.ifr_flags = TUNMODE;
-    strncpy(ifr.ifr_name, "toto%d", IFNAMSIZ);
+    strncpy(ifr.ifr_name, "tun%d", IFNAMSIZ);
     if (ioctl(fd, TUNSETIFF, (void *)&ifr) < 0) PERROR("ioctl");
     
-    printf("Allocated interface %s. Configure and use it\n", ifr.ifr_name);
+    printf("Allocated interface %s.\n", ifr.ifr_name);
     
     s = socket(PF_INET, SOCK_DGRAM, 0);
     sin.sin_family = AF_INET;
@@ -365,7 +318,7 @@ int main ()
     
     CHK_SSL(err);
     
-    // Will verify the server
+    // verify the server
     SSL_CTX_set_verify(ctx,SSL_VERIFY_PEER,NULL);
     // Set the location of the CA certificate
     SSL_CTX_load_verify_locations(ctx,CACERT,NULL);
@@ -388,15 +341,12 @@ int main ()
     err = connect(sd, (struct sockaddr*) &sa,
                   sizeof(sa));                   CHK_ERR(err, "connect");
     
-    /* ----------------------------------------------- */
-    /* Now we have TCP conncetion. Start SSL negotiation. */
     
+    // SSL Handshake
     ssl = SSL_new (ctx);                         CHK_NULL(ssl);
     SSL_set_fd (ssl, sd);
     err = SSL_connect (ssl);                     CHK_SSL(err);
     
-    /* Following two steps are optional and not required for
-     data exchange to be successful. */
     
     /* Get the cipher - opt */
     printf ("SSL connection using %s\n", SSL_get_cipher (ssl));
@@ -444,9 +394,9 @@ int main ()
     
     
     // authentication outcome
-    err = SSL_read (ssl, buf, sizeof(buf) - 1);				CHK_SSL(err);
-    buf[err] = '\0';
-    printf ("%s\n", buf);
+    // err = SSL_read (ssl, buf, sizeof(buf) - 1);				CHK_SSL(err);
+    // buf[err] = '\0';
+    // printf ("%s\n", buf);
     
     /*-------------------------------------------------*/
     /* Establishing UDP tunnel in child process */
@@ -482,7 +432,7 @@ int main ()
         char port[10];
         
         //scanf("Input (server ip : port #) to establish UDP tunnel:%s:%s\n",&ip,&port);
-        tunproxy("172.16.20.179","45569");
+        tunproxy("192.168.15.4","55555");
         
         exit(1);
     } 
@@ -499,4 +449,3 @@ int main ()
     
     
 }
-/* EOF - cli.cpp */
