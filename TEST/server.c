@@ -30,7 +30,7 @@
 #include <crypt.h>
 
 
-#define HOME "./"s
+#define HOME "./"
 #define CERTF  HOME "server.crt"
 #define KEYF  HOME  "server.key"
 #define CACERT HOME "ca.crt"
