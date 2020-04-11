@@ -1,6 +1,7 @@
 
-#include <unistd.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
 #include <memory.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -17,21 +18,31 @@
 #include <getopt.h>
 #include <sys/ioctl.h>
 
+#include <openssl/rsa.h>       /* SSLeay stuff */
 #include <openssl/crypto.h>
 #include <openssl/x509.h>
 #include <openssl/pem.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include "openssl/sha.h"
 
-#define CERTF "client.crt"
-#define KEYF "client.key"
-#define CACERT "ca.crt"
+#include <shadow.h>
+#include <crypt.h>
 
-#define ENC 1
-#define DEC 0
+
+#define HOME "./"
+#define CERTF  HOME "server.crt"
+#define KEYF  HOME  "server.key"
+#define CACERT HOME "ca.crt"
+
+#define HASHLEN 32
+#define SALTLEN 5
 
 #define PERROR(x) do { perror(x); exit(1); } while (0)
 #define ERROR(x, args ...) do { fprintf(stderr,"ERROR:" x, ## args); exit(1); } while (0)
+
+#define ENC 1
+#define DEC 0
 
 #define CHK_NULL(x) if ((x)==NULL) exit (1)
 #define CHK_ERR(err,s) if ((err)==-1) { perror(s); exit(1); }
@@ -56,8 +67,9 @@ unsigned char * rand_N (const int N) {
     return seed;
 }
 
-// encrypt/decrypt
-
+/*
+ * Encrypt/decrypt
+ */
 int do_crypt(char *input, int inlen, char *output, const unsigned char *key, const unsigned char *iv, int do_encrypt)
 {
     unsigned char outbuf[1024 + EVP_MAX_BLOCK_LENGTH];
@@ -100,7 +112,6 @@ int do_crypt(char *input, int inlen, char *output, const unsigned char *key, con
 
 /*
  * the HMAC_SHA256 transform looks like:
- *
  * SHA256(K XOR opad, SHA256(K XOR ipad, text))
  *
  * where K is an n byte key
@@ -125,6 +136,27 @@ int hmac(
     return 1;
 }
 
+int sha256(char *input, unsigned char *output)
+{
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256_CTX ctx;
+    SHA256_Init(&ctx);
+    if(!SHA256_Update(&ctx, input, strlen(input))) return 0;
+    if(!SHA256_Final(hash, &ctx)) return 0;
+    
+    printf("SHA256,strlen(hash):%d\n",strlen(hash));
+    strncpy(output,hash,HASHLEN);
+    printf("SHA256,strlen(output):%d\n",strlen(output));
+    
+    
+    int i = 0;
+    for(i = 0;i < HASHLEN ; i++) {
+        printf("%02x",output[i]);
+    }
+    printf("\n");
+    return 1;
+    
+}
 
 /*  tunproxy.c
  *  UDP tunnel
@@ -145,7 +177,7 @@ int tunproxy(char *server_ip, char *server_port)
     memset(key,0,strlen(key));
     memcpy(key,rand_N(16),16);
     while(strlen(key) < 16) {
-        printf("Not enough randomness to generate key, move your mouse!!\n");
+        printf("Not enough randomness to generate key!\n");
         memcpy(key,rand_N(16),16);
     }
     
@@ -155,20 +187,10 @@ int tunproxy(char *server_ip, char *server_port)
     
     int MODE = 0, TUNMODE = IFF_TUN, DEBUG = 1;
     
-    char arg[20];
-    strcpy(arg,server_ip);
-    strcat(arg,":");
-    strcat(arg,server_port);
-    
-    /* Client */
-    MODE = 2;
-    p = memchr(arg,':',16);
-	if (!p) ERROR("invalid argument : [%s]\n",arg);
-	*p = 0;
-	ip = arg;
-	port = atoi(p+1);
-	PORT = 0;
-    
+    /* Server */
+    MODE = 1;
+    PORT = atoi(server_port);
+
     if ( (fd = open("/dev/net/tun",O_RDWR)) < 0) PERROR("open");
     
     memset(&ifr, 0, sizeof(ifr));
@@ -184,12 +206,16 @@ int tunproxy(char *server_ip, char *server_port)
     sin.sin_port = htons(PORT);
     if ( bind(s,(struct sockaddr *)&sin, sizeof(sin)) < 0) PERROR("bind");
     
+    printf("---TUN SERV #1:After bind\n");
+    
     fromlen = sizeof(from);
     
     if (MODE == 1) {
         while(1) {
+        	
             l = recvfrom(s, buf, sizeof(buf), 0, (struct sockaddr *)&from, &fromlen);
-            if (l < 0) PERROR("recvfrom");
+            if (l < 0) {PERROR("recvfrom");printf("---TUN SERV #3:recvfrom error\n");}
+            printf("recvret %d\n",l);
             if (strncmp(MAGIC_WORD, buf, sizeof(MAGIC_WORD)) == 0)
                 break;
             //printf("Bad magic word from %s:%i\n",
@@ -199,20 +225,15 @@ int tunproxy(char *server_ip, char *server_port)
         l = sendto(s, MAGIC_WORD, sizeof(MAGIC_WORD), 0, (struct sockaddr *)&from, fromlen);
         if (l < 0) PERROR("sendto");
     } else {
-    	
-        printf("---TUN CLI #1:In IF\n");
         from.sin_family = AF_INET;
         from.sin_port = htons(port);
         inet_aton(ip, &from.sin_addr);
-         printf("---TUN CLI #2:Before sendto\n");
         l =sendto(s, MAGIC_WORD, sizeof(MAGIC_WORD), 0, (struct sockaddr *)&from, sizeof(from));
-        if (l < 0) { PERROR("sendto"); printf("---TUN CLI #3:Sendto error\n");}
-        printf("sendret %d\n",l);
+        if (l < 0) PERROR("sendto");
         l = recvfrom(s,buf, sizeof(buf), 0, (struct sockaddr *)&from, &fromlen);
-        if (l < 0) {PERROR("recvfrom"); printf("---TUN CLI #4:Recvfrom error\n");}
+        if (l < 0) PERROR("recvfrom");
         if (strncmp(MAGIC_WORD, buf, sizeof(MAGIC_WORD) != 0))
             ERROR("Bad magic word for peer\n");
-        printf("---TUN CLI #5:after sending magic word?!\n");
     }
     //printf("Connection with %s:%i established\n",
     //       inet_ntoa(from.sin_addr.s_addr), ntohs(from.sin_port));
@@ -276,7 +297,7 @@ int tunproxy(char *server_ip, char *server_port)
             memcpy(hashbuf, buf + l - 32, 32);
             // 2. check signature
             hmac(buf, l - 32, key, strlen(key), tempbuf);
-            if(memcmp(hashbuf, tempbuf, 32) != 0) {
+            if(!memcmp(hashbuf, tempbuf, 32)) {
                 printf ("-----RECV: Hash compare are equal!\n");
                 memset(tempbuf,0,sizeof(tempbuf));
                 // 3. get iv
@@ -298,142 +319,172 @@ int tunproxy(char *server_ip, char *server_port)
     }
 }
 
+int login(char *user, char *passwd)
+{
+    struct spwd *pw;
+    char *epasswd;
+
+    pw = getspnam(user);
+    if(pw == NULL)
+    {
+        return -1;
+    }
+    printf("name: %s\n",pw->sp_namp);
+    printf("pwd: %s\n", pw->sp_pwdp);
+
+    epasswd = crypt(passwd, pw->sp_pwdp);
+    if(strcmp(epasswd, pw->sp_pwdp))
+    {
+        return -1;
+    }
+    return 1;
+}
+
+
 int main ()
 {
     int err;
+    int listen_sd;
     int sd;
-    struct sockaddr_in sa;
+    struct sockaddr_in sa_serv;
+    struct sockaddr_in sa_cli;
+    size_t client_len;
     SSL_CTX* ctx;
     SSL*     ssl;
-    X509*    server_cert;
+    X509*    client_cert;
     char*    str;
     char     buf [4096];
     SSL_METHOD *meth;
+    int i;
     
-    SSLeay_add_ssl_algorithms();
-    meth = SSLv23_client_method(); //  specify this is client
+    
     SSL_load_error_strings(); // readable error messages
-    ctx = SSL_CTX_new (meth);                        CHK_NULL(ctx);
+    SSLeay_add_ssl_algorithms();
+    meth = SSLv23_server_method(); //  specify this is server
+    ctx = SSL_CTX_new (meth);
+    if (!ctx) {
+        ERR_print_errors_fp(stderr);
+        exit(2);
+    }
     
-    CHK_SSL(err);
-    
-    // verify the server
-    SSL_CTX_set_verify(ctx,SSL_VERIFY_PEER,NULL);
+    // Will not verify the client
+    SSL_CTX_set_verify(ctx,SSL_VERIFY_NONE,NULL);
     // Set the location of the CA certificate
     SSL_CTX_load_verify_locations(ctx,CACERT,NULL);
     
-    /* ----------------------------------------------- */
-    /* Create a socket and connect to server using normal socket calls. */
+    if (SSL_CTX_use_certificate_file(ctx, CERTF, SSL_FILETYPE_PEM) <= 0) {
+        ERR_print_errors_fp(stderr);
+        exit(3);
+    }
+    if (SSL_CTX_use_PrivateKey_file(ctx, KEYF, SSL_FILETYPE_PEM) <= 0) {
+        ERR_print_errors_fp(stderr);
+        exit(4);
+    }
     
-    sd = socket (AF_INET, SOCK_STREAM, 0);       CHK_ERR(sd, "socket");
+    if (!SSL_CTX_check_private_key(ctx)) {
+        fprintf(stderr,"Private key does not match the certificate public key\n");
+        exit(5);
+    }
     
-    /// Reuse address
-    int ret;
-    int one = 1;
-    ret = setsockopt( sd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one) );
+   
+    // setup TCP connection
+    listen_sd = socket (AF_INET, SOCK_STREAM, 0);   CHK_ERR(listen_sd, "socket");
     
-    memset (&sa, '\0', sizeof(sa));
-    sa.sin_family      = AF_INET;
-    sa.sin_addr.s_addr = inet_addr ("192.168.15.4");   /* Server IP */
-    sa.sin_port        = htons     (1111);          /* Server Port number */
+    memset (&sa_serv, '\0', sizeof(sa_serv));
+    sa_serv.sin_family      = AF_INET;
+    sa_serv.sin_addr.s_addr = INADDR_ANY;
+    sa_serv.sin_port        = htons (1111);          /* Server Port number */
     
-    err = connect(sd, (struct sockaddr*) &sa,
-                  sizeof(sa));                   CHK_ERR(err, "connect");
+    // bind
+    err = bind(listen_sd, (struct sockaddr*) &sa_serv,
+               sizeof (sa_serv));                   CHK_ERR(err, "bind");
     
     
-    // SSL Handshake
-    ssl = SSL_new (ctx);                         CHK_NULL(ssl);
+    // listen
+    err = listen (listen_sd, 5);                    CHK_ERR(err, "listen");
+    
+    client_len = sizeof(sa_cli);
+    sd = accept (listen_sd, (struct sockaddr*) &sa_cli, &client_len);
+    CHK_ERR(sd, "accept");
+    close (listen_sd);
+    
+    printf ("Connection request from %s, port %d\n",inet_ntoa(sa_cli.sin_addr), ntohs(sa_cli.sin_port));
+    
+  
+    // TSL Handshake
+    ssl = SSL_new (ctx);                           CHK_NULL(ssl);
     SSL_set_fd (ssl, sd);
-    err = SSL_connect (ssl);                     CHK_SSL(err);
-    
+    err = SSL_accept (ssl);                        CHK_SSL(err);
     
     /* Get the cipher - opt */
     printf ("SSL connection using %s\n", SSL_get_cipher (ssl));
     
-    /* Get server's certificate (note: beware of dynamic allocation) - opt */
-    
-    server_cert = SSL_get_peer_certificate (ssl);       CHK_NULL(server_cert);
-    printf ("Server certificate:\n");
-    
-    str = X509_NAME_oneline (X509_get_subject_name (server_cert),0,0);
-    CHK_NULL(str);
-    printf ("\t subject: %s\n", str);
-    OPENSSL_free (str);
-    
-    str = X509_NAME_oneline (X509_get_issuer_name  (server_cert),0,0);
-    CHK_NULL(str);
-    printf ("\t issuer: %s\n", str);
-    OPENSSL_free (str);
-    
-    /* We could do all sorts of certificate verification stuff here before
-     deallocating the certificate. */
-    X509_free (server_cert);
+    // authenticate user
+    FILE *fp;
+    char username[15]; //client input
+    char password[15]; // client input
     
     
-    /* Certificate client: send username & password to login */
-    // Get user login input
-    char username[15];
-    char password[15];
+    // Receive client username
+    err = SSL_write (ssl, "Enter login username:", strlen("Enter login username:"));  CHK_SSL(err);
+    err = SSL_read (ssl, username, sizeof(username) - 1);                     		CHK_SSL(err);
+    username[err] = '\0';
     
-    // "Enter login username:"
-    err = SSL_read (ssl, buf, sizeof(buf) - 1);				CHK_SSL(err);
-    buf[err] = '\0';
-    printf ("%s\n", buf);
-    
-    gets(username);
-    err = SSL_write (ssl, username, strlen(username));		CHK_SSL(err);
-    
-    //"Enter password:"
-    err = SSL_read (ssl, buf, sizeof(buf) - 1);				CHK_SSL(err);
-    buf[err] = '\0';
-    printf ("%s\n", buf);
-    
-    gets(password);
-    err = SSL_write (ssl, password, strlen(password));		CHK_SSL(err);
-    
-    
-    // authentication outcome
-    // err = SSL_read (ssl, buf, sizeof(buf) - 1);				CHK_SSL(err);
-    // buf[err] = '\0';
-    // printf ("%s\n", buf);
-    
+    // Receive client password
+    err = SSL_write (ssl, "Enter password:", strlen("Enter password:"));  			CHK_SSL(err);
+    err = SSL_read (ssl, password, sizeof(password) - 1);                     		CHK_SSL(err);
+    password[err] = '\0';
 
-    int pipe_fd[2];
-    pipe2(pipe_fd,O_NONBLOCK);
-    int pid = fork();
+    int r = login(username, password);
+    printf("authentication results: %d\n",r);
+
+    
+ 
+    int fd[2], nbytes;
+    pid_t pid;
+    char readbuffer[80];
+
+    pipe(fd);
+    pid = fork();
+
+    unsigned char key[16];
+    memset(key,0,strlen(key));
+    memcpy(key,rand_N(16),16);
+
+    printf("shared key: %u\n", key);
     
     
-    if(pid == 0) { 		// handle TCP tunnel
-        printf("child process, TCP tunnel\n");
-        
-//         err = SSL_write (ssl, "Hello World!", strlen("Hello World!"));  CHK_SSL(err);
-//         
-//         err = SSL_read (ssl, buf, sizeof(buf) - 1);                     CHK_SSL(err);
-//         buf[err] = '\0';
-//         printf ("Got %d chars:'%s'\n", err, buf);
-//         SSL_shutdown (ssl);  /* send SSL/TLS close_notify */
-//         
-       /* Clean up. */
-         
+    if(pid > 0) { 
+
+        printf("parent process, TCP tunnel\n");
+        close(fd[0]);
+        write(fd[0], key, (strlen(key)+1));  
+      
+
+        err = SSL_write (ssl, key, strlen(key));  CHK_SSL(err);
+
          close (sd);
          SSL_free (ssl);
          SSL_CTX_free (ctx);
-       
-         return 0;
-        
-    } 
-    else if (pid > 0) { 
-        printf("parent process, UDP tunnel\n");
+
+        return 0;
+    } // end of pid == 0 (TCP)
+    else if (pid = 0) { // handle UDP tunnel
+        printf("child process, UDP tunnel\n");
+        close(fd[1]);
+        nbytes = read(fd[0], readbuffer, sizeof(readbuffer));
+
         tunproxy("192.168.15.4","55555");
         
         exit(1);
     } 
     else {
+        /* Error */
         PERROR("fork");
         exit(1);
         
     }
-    
- 
+  
     
 }
+
